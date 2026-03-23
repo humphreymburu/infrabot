@@ -1,0 +1,93 @@
+name: backend-ci-evals
+
+on:
+  push:
+    paths:
+      - "app/**"
+      - "tests/**"
+      - ".github/workflows/ci-evals.yml"
+      - "pyproject.toml"
+      - "requirements.txt"
+  pull_request:
+    paths:
+      - "app/**"
+      - "tests/**"
+      - ".github/workflows/ci-evals.yml"
+      - "pyproject.toml"
+      - "requirements.txt"
+  workflow_dispatch:
+    inputs:
+      run_live_evals:
+        description: "Run live model evals (requires provider API keys)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      replay_mode:
+        description: "Replay harness mode for tool/search calls"
+        required: false
+        default: "off"
+        type: choice
+        options:
+          - "off"
+          - "record"
+          - "replay"
+      replay_dir:
+        description: "Replay artifact directory path"
+        required: false
+        default: "/tmp/tech_advisor_replay"
+        type: string
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile checks
+        run: |
+          python -m py_compile app/*.py tests/evals/runner.py
+      - name: Validate eval fixtures
+        run: |
+          python tests/evals/runner.py --validate-only --fixtures-dir tests/evals/fixtures
+
+  live-evals:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_live_evals == 'true' }}
+    needs: [static-checks]
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      POLICY_MODE: enforced_full
+      POLICY_FORCE_TIER: high
+      REVIEW_ENABLED: "0"
+      REPLAY_MODE: ${{ inputs.replay_mode }}
+      REPLAY_DIR: ${{ inputs.replay_dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Validate provider keys
+        run: |
+          if [ -z "$OPENAI_API_KEY" ] && [ -z "$GEMINI_API_KEY" ] && [ -z "$QWEN_API_KEY" ]; then
+            echo "No model provider key available for live evals."
+            exit 1
+          fi
+      - name: Run eval regression gates
+        run: |
+          python tests/evals/runner.py --fixtures-dir tests/evals/fixtures --thresholds-file tests/evals/thresholds.json --replay-mode "$REPLAY_MODE" --replay-dir "$REPLAY_DIR"

@@ -1,0 +1,20 @@
+[project]
+name = "tech-advisor-server"
+version = "1.0.0"
+description = "FastAPI backend for Atlas AI tech-decision advisor (Gemini + Qwen routing)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "litellm>=1.48.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "aiohttp>=3.10.0",
+    "openai>=2.26.0",
+    "tavily-python>=0.5.0",
+    "pytest>=8.3.0",
+]
+
+# No [build-system]: app-only project; uv sync only installs dependencies.
+# Run with: uv run uvicorn app.main:app --reload
